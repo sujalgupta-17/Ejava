@@ -1,0 +1,924 @@
+JAVA SERVLET & JSP PRACTICALS - MODULE 1
+TY B.Sc. IT | Copy/paste lab guide
+
+VERSION CHOICE / IMPORTANT
+--------------------------
+This guide uses Java 11+, Apache Tomcat 9, Maven, MySQL/MariaDB and the
+javax.servlet API (Servlet 4.0), JSP 2.3 and JSTL 1.2.
+Tomcat 9 uses javax.servlet.*. Tomcat 10/10.1 uses jakarta.servlet.*.
+Do not mix Tomcat 10 with the javax imports in these examples.
+
+The practical question list does not specify versions. These are explicit
+compatibility assumptions so the examples can be used together.
+These are classroom demonstrations, not production-ready security code.
+
+
+NETBEANS 15 + TOMCAT 9 SETUP
+----------------------------
+This practical guide is compatible with Apache NetBeans 15 and Apache Tomcat 9.
+Use a JDK supported by NetBeans 15 (JDK 11 or JDK 17 is a suitable choice).
+
+1. Install / check:
+   - Apache NetBeans 15 with Java Web / Jakarta EE support
+   - JDK 11 or JDK 17
+   - Apache Tomcat 9
+   - MariaDB or MySQL
+
+2. Register Tomcat 9 in NetBeans:
+   - Open NetBeans.
+   - Go to Tools > Servers > Add Server.
+   - Select Apache Tomcat or TomEE (Tomcat 9).
+   - Browse to the Tomcat 9 installation folder.
+   - Enter the Tomcat Manager username and password if requested.
+   - Finish. Tomcat should appear under the Services > Servers node.
+
+   If Tomcat Manager credentials are required, edit:
+       TOMCAT_HOME/conf/tomcat-users.xml
+   Add these lines inside the <tomcat-users> element:
+       <role rolename="manager-script"/>
+       <user username="netbeans" password="NetBeansLab123!" roles="manager-script"/>
+   Restart Tomcat after changing this file. Use these credentials only for a
+   local college lab; do not expose the Manager application to the internet.
+
+3. Create the project:
+   - File > New Project.
+   - Choose Java with Maven > Web Application.
+   - Project Name: java-practicals
+   - Group ID: com.example
+   - Version: 1.0
+   - Select Apache Tomcat 9 as the server if the wizard asks.
+   - Finish.
+
+   If the wizard does not ask for a server, right-click the project >
+   Properties > Run and select the registered Tomcat 9 server if available.
+
+4. Add the code:
+   - Java classes: Source Packages > com.example.
+   - HTML and JSP files: Web Pages.
+   - Replace the generated pom.xml dependencies with the pom.xml in this guide,
+     or merge the listed dependencies into the generated pom.xml.
+   - Create DB.java in package com.example.
+   - Keep the package name com.example for all servlet classes.
+
+5. Run:
+   - Right-click the project > Clean and Build.
+   - Right-click the project > Run.
+   - NetBeans builds the WAR and deploys it to Tomcat.
+   - Open the URL shown in the Output window, normally:
+       http://localhost:8080/java-practicals/
+
+   After changing files, use Run again. To view errors, open the Output window
+   and check Tomcat logs under TOMCAT_HOME/logs/catalina.out.
+
+IMPORTANT:
+- This guide uses javax.servlet.* and JSTL 1.2, which match Tomcat 9.
+- Do not change imports to jakarta.servlet.* when using Tomcat 9.
+- If NetBeans generated a different Java source/target version in pom.xml,
+  set maven.compiler.source and maven.compiler.target to 11 (or a JDK level
+  supported by the installed compiler).
+- The guide's Maven commands still work, but NetBeans Run is the easier
+  deployment workflow when the Tomcat server is registered.
+
+PREREQUISITES (FEDORA)
+----------------------
+Install Java and Maven:
+    sudo dnf install -y java-11-openjdk-devel maven
+If Java 11 is unavailable on your Fedora release:
+    sudo dnf install -y java-latest-openjdk-devel maven
+Check:
+    java -version
+    javac -version
+    mvn -version
+
+Install MariaDB (MySQL-compatible for these JDBC examples):
+    sudo dnf install -y mariadb-server
+    sudo systemctl enable --now mariadb
+    sudo mariadb-secure-installation
+    sudo mariadb
+
+Create database and tables inside the MariaDB prompt:
+    CREATE DATABASE servlet_practical;
+    USE servlet_practical;
+    CREATE TABLE users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      password VARCHAR(255) NOT NULL,
+      email VARCHAR(100) NOT NULL,
+      country VARCHAR(60) NOT NULL
+    );
+    CREATE TABLE questions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      question VARCHAR(255) NOT NULL,
+      answer VARCHAR(255) NOT NULL
+    );
+    INSERT INTO questions(question,answer) VALUES
+      ('What is JVM?','Java Virtual Machine'),
+      ('What is JSP?','JavaServer Pages');
+    CREATE TABLE employee (
+      eno INT PRIMARY KEY,
+      name VARCHAR(60),
+      age INT,
+      designation VARCHAR(60),
+      salary DECIMAL(10,2)
+    );
+    INSERT INTO employee VALUES
+      (1,'Amit',22,'Developer',25000),
+      (2,'Neha',23,'Tester',28000);
+    CREATE USER 'labuser'@'localhost' IDENTIFIED BY 'LabPass123!';
+    GRANT ALL PRIVILEGES ON servlet_practical.* TO 'labuser'@'localhost';
+    FLUSH PRIVILEGES;
+    EXIT;
+
+Use the official Apache Tomcat 9 download or the college-provided Tomcat 9.
+Extract it to ~/apache-tomcat-9 (example path).
+Start/stop:
+    ~/apache-tomcat-9/bin/startup.sh
+    ~/apache-tomcat-9/bin/shutdown.sh
+
+CREATE ONE MAVEN WEB PROJECT
+----------------------------
+    mkdir -p ~/java-practicals/src/main/java/com/example
+    mkdir -p ~/java-practicals/src/main/webapp/WEB-INF
+    cd ~/java-practicals
+Create pom.xml:
+    nano pom.xml
+
+Paste:
+    <project xmlns="http://maven.apache.org/POM/4.0.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+      <modelVersion>4.0.0</modelVersion>
+      <groupId>com.example</groupId>
+      <artifactId>java-practicals</artifactId>
+      <version>1.0</version>
+      <packaging>war</packaging>
+      <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>javax.servlet</groupId>
+          <artifactId>javax.servlet-api</artifactId>
+          <version>4.0.1</version>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>javax.servlet.jsp</groupId>
+          <artifactId>javax.servlet.jsp-api</artifactId>
+          <version>2.3.3</version>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>javax.servlet</groupId>
+          <artifactId>jstl</artifactId>
+          <version>1.2</version>
+        </dependency>
+        <dependency>
+          <groupId>com.mysql</groupId>
+          <artifactId>mysql-connector-j</artifactId>
+          <version>8.0.33</version>
+        </dependency>
+      </dependencies>
+      <build><finalName>java-practicals</finalName></build>
+    </project>
+
+Create DB.java at src/main/java/com/example/DB.java:
+    package com.example;
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.SQLException;
+    public class DB {
+      public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(
+          "jdbc:mysql://localhost:3306/servlet_practical",
+          "labuser", "LabPass123!");
+      }
+    }
+
+Build/deploy after creating files:
+    cd ~/java-practicals
+    mvn clean package
+    cp target/java-practicals.war ~/apache-tomcat-9/webapps/
+Open: http://localhost:8080/java-practicals/
+Logs: tail -f ~/apache-tomcat-9/logs/catalina.out
+
+FILE PLACEMENT
+--------------
+HTML/JSP files: src/main/webapp/
+Java files:     src/main/java/com/example/
+Every Java class below must be saved with the exact filename shown.
+Servlet URL mappings are given by @WebServlet.
+
+============================================================
+PRACTICAL 1 - SIMPLE SERVLET APPLICATIONS
+============================================================
+
+1(a) CALCULATOR SERVLET
+
+Create src/main/webapp/calculator.html:
+    <!DOCTYPE html><html><body>
+    <h2>Calculator</h2>
+    <form action="calculator" method="post">
+      Number 1: <input type="number" step="any" name="n1" required><br>
+      Number 2: <input type="number" step="any" name="n2" required><br>
+      <select name="op">
+        <option value="add">Addition</option>
+        <option value="sub">Subtraction</option>
+        <option value="mul">Multiplication</option>
+        <option value="div">Division</option>
+      </select>
+      <button>Calculate</button>
+    </form></body></html>
+
+Create src/main/java/com/example/CalculatorServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/calculator")
+    public class CalculatorServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        res.setContentType("text/html;charset=UTF-8");
+        PrintWriter out=res.getWriter();
+        try {
+          double a=Double.parseDouble(req.getParameter("n1"));
+          double b=Double.parseDouble(req.getParameter("n2"));
+          String op=req.getParameter("op");
+          double ans;
+          switch(op) {
+            case "add": ans=a+b; break;
+            case "sub": ans=a-b; break;
+            case "mul": ans=a*b; break;
+            case "div":
+              if(b==0) { out.println("Cannot divide by zero"); return; }
+              ans=a/b; break;
+            default: out.println("Invalid operation"); return;
+          }
+          out.println("<h2>Result: "+ans+"</h2>");
+        } catch(NumberFormatException e) {
+          out.println("Enter valid numbers");
+        }
+      }
+    }
+Test: /calculator.html
+
+1(b) LOGIN SERVLET
+
+Create src/main/webapp/login.html:
+    <!DOCTYPE html><html><body>
+    <form action="login" method="post">
+      Username: <input name="username" required><br>
+      Password: <input type="password" name="password" required><br>
+      <button>Login</button>
+    </form></body></html>
+
+Create src/main/java/com/example/LoginServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/login")
+    public class LoginServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        res.setContentType("text/html;charset=UTF-8");
+        String u=req.getParameter("username");
+        String p=req.getParameter("password");
+        if("admin".equals(u) && "1234".equals(p))
+          res.getWriter().println("Hello "+u);
+        else
+          res.getWriter().println("login failed");
+      }
+    }
+Test username admin / password 1234. Hard-coded credentials are for lab demo only.
+
+1(c) REGISTRATION SERVLET USING JDBC
+
+Create src/main/webapp/register.html:
+    <!DOCTYPE html><html><body>
+    <form action="register" method="post">
+      Username: <input name="username" required><br>
+      Password: <input type="password" name="password" required><br>
+      Email: <input type="email" name="email" required><br>
+      Country: <input name="country" required><br>
+      <button>Register</button>
+    </form></body></html>
+
+Create src/main/java/com/example/RegisterServlet.java:
+    package com.example;
+    import java.io.*;
+    import java.sql.*;
+    import javax.servlet.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/register")
+    public class RegisterServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws ServletException,IOException {
+        String sql="INSERT INTO users(username,password,email,country) VALUES(?,?,?,?)";
+        try(Connection con=DB.getConnection();
+            PreparedStatement ps=con.prepareStatement(sql)) {
+          ps.setString(1,req.getParameter("username"));
+          ps.setString(2,req.getParameter("password"));
+          ps.setString(3,req.getParameter("email"));
+          ps.setString(4,req.getParameter("country"));
+          ps.executeUpdate();
+          res.getWriter().println("Registration successful");
+        } catch(SQLException e) {
+          throw new ServletException("Registration/database error",e);
+        }
+      }
+    }
+Lab simplification stores password as entered. Real apps must hash passwords (BCrypt/Argon2).
+
+============================================================
+PRACTICAL 2 - REQUEST DISPATCHER, COOKIES AND SESSIONS
+============================================================
+
+2(a) REQUEST DISPATCHER PASSWORD CHECK
+
+Create src/main/webapp/index.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <h2>Password Validation</h2>
+    <p style="color:red">${requestScope.error}</p>
+    <form action="check-password" method="post">
+      Password: <input type="password" name="password" required>
+      <button>Submit</button>
+    </form>
+
+Create src/main/java/com/example/PasswordCheckServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/check-password")
+    public class PasswordCheckServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws ServletException,IOException {
+        if("Servlet".equals(req.getParameter("password"))) {
+          req.getRequestDispatcher("/welcome").forward(req,res);
+        } else {
+          req.setAttribute("error","Wrong password. Try again.");
+          req.getRequestDispatcher("/index.jsp").forward(req,res);
+        }
+      }
+    }
+
+Create src/main/java/com/example/WelcomeServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/welcome")
+    public class WelcomeServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        res.setContentType("text/html");
+        res.getWriter().println("<h2>Welcome! Correct password.</h2>");
+      }
+    }
+Test password: Servlet. Open /index.jsp.
+The incorrect password is forwarded back to index.jsp, where the error is shown.
+
+2(b) COOKIE VISIT COUNTER
+
+Create src/main/webapp/cookie.html:
+    <a href="visit-cookie">Count my servlet visits</a>
+
+Create src/main/java/com/example/CookieVisitServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/visit-cookie")
+    public class CookieVisitServlet extends HttpServlet {
+      protected void doGet(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        int count=0;
+        Cookie[] all=req.getCookies();
+        if(all!=null) for(Cookie c:all) {
+          if("visitCount".equals(c.getName())) {
+            try { count=Integer.parseInt(c.getValue()); }
+            catch(NumberFormatException ignored) { count=0; }
+          }
+        }
+        count++;
+        Cookie c=new Cookie("visitCount",String.valueOf(count));
+        c.setMaxAge(30*24*60*60);
+        c.setHttpOnly(true);
+        res.addCookie(c);
+        res.setContentType("text/html");
+        res.getWriter().println("You visited this servlet "+count+" times.");
+      }
+    }
+
+2(c) SESSION CREATE, VISIT CHECK AND DESTROY
+
+Create src/main/webapp/session.html:
+    <a href="session-demo">Open session</a><br>
+    <a href="destroy-session">Destroy session</a>
+
+Create src/main/java/com/example/SessionServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/session-demo")
+    public class SessionServlet extends HttpServlet {
+      protected void doGet(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        HttpSession s=req.getSession();
+        Integer n=(Integer)s.getAttribute("visits");
+        boolean first=(n==null);
+        n=(n==null)?1:n+1;
+        s.setAttribute("visits",n);
+        res.setContentType("text/html");
+        res.getWriter().println(first ?
+          "First visit in this session" : "You visited earlier too");
+        res.getWriter().println("<br>Visit count: "+n);
+        res.getWriter().println("<br>Session ID: "+s.getId());
+        res.getWriter().println("<br><a href='destroy-session'>Destroy</a>");
+      }
+    }
+
+Create src/main/java/com/example/DestroySessionServlet.java:
+    package com.example;
+    import java.io.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/destroy-session")
+    public class DestroySessionServlet extends HttpServlet {
+      protected void doGet(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        HttpSession s=req.getSession(false);
+        if(s!=null) s.invalidate();
+        res.setContentType("text/html");
+        res.getWriter().println("Session destroyed. <a href='session.html'>Start again</a>");
+      }
+    }
+
+============================================================
+PRACTICAL 3 - SERVLET I/O AND FILE APPLICATIONS
+============================================================
+
+3(a) FILE UPLOAD AND DOWNLOAD
+
+Create upload folder:
+    mkdir -p ~/servlet-uploads
+
+Create src/main/webapp/upload.html:
+    <!DOCTYPE html><html><body>
+    <form action="upload" method="post" enctype="multipart/form-data">
+      Select file: <input type="file" name="file" required>
+      <button>Upload</button>
+    </form>
+    <a href="download?name=sample.txt">Download sample.txt</a>
+    </body></html>
+
+Create src/main/java/com/example/UploadServlet.java:
+    package com.example;
+    import java.io.*;
+    import java.nio.file.*;
+    import javax.servlet.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.*;
+    @WebServlet("/upload")
+    @MultipartConfig(maxFileSize=5*1024*1024)
+    public class UploadServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws ServletException,IOException {
+        Part part=req.getPart("file");
+        String name=Paths.get(part.getSubmittedFileName()).getFileName().toString();
+        name=name.replaceAll("[^a-zA-Z0-9._-]","_");
+        Path dir=Paths.get(System.getProperty("user.home"),"servlet-uploads");
+        Files.createDirectories(dir);
+        part.write(dir.resolve(name).toString());
+        res.getWriter().println("Uploaded: "+name);
+      }
+    }
+
+Create src/main/java/com/example/DownloadServlet.java:
+    package com.example;
+    import java.io.*;
+    import java.nio.file.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/download")
+    public class DownloadServlet extends HttpServlet {
+      protected void doGet(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        String name=req.getParameter("name");
+        if(name==null || !name.matches("[a-zA-Z0-9._-]+")) {
+          res.sendError(400,"Invalid file name"); return;
+        }
+        Path f=Paths.get(System.getProperty("user.home"),"servlet-uploads",name);
+        if(!Files.isRegularFile(f)) { res.sendError(404,"File not found"); return; }
+        res.setContentType("application/octet-stream");
+        res.setHeader("Content-Disposition","attachment; filename=\""+name+"\"");
+        Files.copy(f,res.getOutputStream());
+      }
+    }
+Upload a file named sample.txt before testing the download link.
+
+3(b) DATABASE QUESTION-ANSWER APPLICATION
+
+Create src/main/webapp/qa.jsp:
+    <%@ page import="java.sql.*,com.example.DB" %>
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <h2>Questions and Answers</h2>
+    <%
+    try(Connection con=DB.getConnection();
+        Statement st=con.createStatement();
+        ResultSet rs=st.executeQuery("SELECT question,answer FROM questions")) {
+      while(rs.next()) {
+    %>
+      <b>Question:</b> <%= rs.getString("question") %><br>
+      <b>Answer:</b> <%= rs.getString("answer") %><hr>
+    <%
+      }
+    } catch(Exception e) { out.println("Database error: "+e.getMessage()); }
+    %>
+
+3(c) NON-BLOCKING READ OPERATION (Servlet 3.1+)
+
+Create src/main/webapp/nonblocking.html:
+    <form action="nonblocking" method="post">
+      <textarea name="data">Sample input data</textarea>
+      <button>Send</button>
+    </form>
+
+Create src/main/java/com/example/NonBlockingServlet.java:
+    package com.example;
+    import java.io.*;
+    import java.nio.charset.StandardCharsets;
+    import javax.servlet.*;
+    import javax.servlet.http.*;
+    import javax.servlet.annotation.WebServlet;
+    @WebServlet("/nonblocking")
+    public class NonBlockingServlet extends HttpServlet {
+      protected void doPost(HttpServletRequest req,HttpServletResponse res)
+          throws IOException {
+        res.setContentType("text/plain;charset=UTF-8");
+        ServletInputStream in=req.getInputStream();
+        in.setReadListener(new ReadListener() {
+          ByteArrayOutputStream data=new ByteArrayOutputStream();
+          public void onDataAvailable() throws IOException {
+            byte[] b=new byte[1024];
+            while(in.isReady() && !in.isFinished()) {
+              int n=in.read(b);
+              if(n>0) data.write(b,0,n);
+            }
+          }
+          public void onAllDataRead() throws IOException {
+            res.getWriter().write("Read complete: "+
+              new String(data.toByteArray(),StandardCharsets.UTF_8));
+          }
+          public void onError(Throwable t) {
+            getServletContext().log("Async read failed",t);
+          }
+        });
+      }
+    }
+Test on Tomcat 9. Do not call getParameter() for the same request body in this example.
+
+============================================================
+PRACTICAL 4 - BASIC JSP APPLICATIONS
+============================================================
+
+4(a) JSP IMPLICIT OBJECTS
+
+Create src/main/webapp/implicit.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <h2>JSP Implicit Objects</h2>
+    Request method: <%= request.getMethod() %><br>
+    Request URI: <%= request.getRequestURI() %><br>
+    Server: <%= application.getServerInfo() %><br>
+    Session ID: <%= session.getId() %><br>
+    Servlet name: <%= config.getServletName() %><br>
+    Page class: <%= page.getClass().getName() %><br>
+    PageContext available: <%= pageContext!=null %><br>
+    <%
+      out.println("Printed using out object.");
+    %>
+
+4(b) PASS FORM VALUES BETWEEN JSP PAGES WITH VALIDATION
+
+Create src/main/webapp/student-form.jsp:
+    <form action="student-result.jsp" method="post">
+      Name: <input name="name" required><br>
+      Age: <input type="number" name="age" min="1" max="100" required><br>
+      Hobbies:
+      <input type="checkbox" name="hobbies" value="Reading">Reading
+      <input type="checkbox" name="hobbies" value="Sports">Sports
+      <input type="checkbox" name="hobbies" value="Music">Music<br>
+      Email: <input type="email" name="email" required><br>
+      Gender:
+      <input type="radio" name="gender" value="Male" required>Male
+      <input type="radio" name="gender" value="Female">Female
+      <input type="radio" name="gender" value="Other">Other<br>
+      <button>Submit</button>
+    </form>
+
+Create src/main/webapp/student-result.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%
+      String name=request.getParameter("name");
+      String email=request.getParameter("email");
+      String gender=request.getParameter("gender");
+      String ageText=request.getParameter("age");
+      String[] hobbies=request.getParameterValues("hobbies");
+      int age=0;
+      try { age=Integer.parseInt(ageText); } catch(Exception e) {}
+      if(name==null || name.trim().isEmpty() || age<1 || age>100 ||
+         email==null || !email.contains("@") || gender==null) {
+    %>
+      Invalid details. <a href="student-form.jsp">Go back</a>
+    <%
+      } else {
+    %>
+      Name: <%= name %><br>Age: <%= age %><br>
+      Email: <%= email %><br>Gender: <%= gender %><br>
+      Hobbies: <%= hobbies==null ? "None" : String.join(", ",hobbies) %>
+    <% } %>
+
+4(c) JSP REGISTRATION AND LOGIN USING JDBC
+
+Create src/main/webapp/jsp-register.jsp:
+    <%@ page import="java.sql.*,com.example.DB" %>
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%
+    if("POST".equalsIgnoreCase(request.getMethod())) {
+      String sql="INSERT INTO users(username,password,email,country) VALUES(?,?,?,?)";
+      try(Connection con=DB.getConnection();
+          PreparedStatement ps=con.prepareStatement(sql)) {
+        ps.setString(1,request.getParameter("username"));
+        ps.setString(2,request.getParameter("password"));
+        ps.setString(3,request.getParameter("email"));
+        ps.setString(4,request.getParameter("country"));
+        ps.executeUpdate();
+        out.println("Registration successful<br>");
+      } catch(Exception e) { out.println("Registration failed: "+e.getMessage()); }
+    }
+    %>
+    <form method="post">
+      Username: <input name="username" required><br>
+      Password: <input type="password" name="password" required><br>
+      Email: <input type="email" name="email" required><br>
+      Country: <input name="country" required><br>
+      <button>Register</button>
+    </form><a href="jsp-login.jsp">Login</a>
+
+Create src/main/webapp/jsp-login.jsp:
+    <%@ page import="java.sql.*,com.example.DB" %>
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%
+    if("POST".equalsIgnoreCase(request.getMethod())) {
+      String sql="SELECT username FROM users WHERE username=? AND password=?";
+      try(Connection con=DB.getConnection();
+          PreparedStatement ps=con.prepareStatement(sql)) {
+        ps.setString(1,request.getParameter("username"));
+        ps.setString(2,request.getParameter("password"));
+        try(ResultSet rs=ps.executeQuery()) {
+          if(rs.next()) out.println("Welcome "+rs.getString("username"));
+          else out.println("Login failed");
+        }
+      } catch(Exception e) { out.println("Database error: "+e.getMessage()); }
+    }
+    %>
+    <form method="post">
+      Username: <input name="username" required><br>
+      Password: <input type="password" name="password" required><br>
+      <button>Login</button>
+    </form>
+These JSP JDBC pages are simplified classroom examples. Real apps must hash passwords.
+
+============================================================
+PRACTICAL 5 - INTERMEDIATE JSP APPLICATIONS
+============================================================
+
+5(a) JSP DIRECTIVES AND IMPLICIT OBJECTS
+
+Create src/main/webapp/directives.jsp:
+    <%@ page language="java" contentType="text/html;charset=UTF-8"
+       import="java.util.Date" session="true" errorPage="error.jsp" %>
+    <h2>JSP Directives</h2>
+    Date: <%= new Date() %><br>
+    Request URI: <%= request.getRequestURI() %><br>
+    Session ID: <%= session.getId() %><br>
+    Server: <%= application.getServerInfo() %>
+
+Create src/main/webapp/error.jsp:
+    <%@ page isErrorPage="true" %>
+    <h2>Error occurred</h2>
+    <%= exception==null ? "Unknown error" : exception.getMessage() %>
+
+5(b) JSP FORM PROCESSING AND INPUT VALIDATION
+
+Create src/main/webapp/validate.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%
+    String msg="";
+    if("POST".equalsIgnoreCase(request.getMethod())) {
+      String name=request.getParameter("name");
+      String email=request.getParameter("email");
+      int age=0;
+      try { age=Integer.parseInt(request.getParameter("age")); } catch(Exception e) {}
+      if(name==null || name.trim().isEmpty()) msg="Name is required";
+      else if(age<18 || age>100) msg="Age must be 18 to 100";
+      else if(email==null || !email.matches("^[^@ ]+@[^@ ]+\\.[^@ ]+$"))
+        msg="Enter valid email";
+      else msg="Valid details submitted for "+name;
+    }
+    %>
+    <h2>Form Validation</h2><p><%= msg %></p>
+    <form method="post">
+      Name: <input name="name" required><br>
+      Age: <input type="number" name="age" required><br>
+      Email: <input type="email" name="email" required><br>
+      <button>Submit</button>
+    </form>
+
+5(c) DISPLAY MYSQL DATA USING JDBC
+
+Create src/main/webapp/employees.jsp:
+    <%@ page import="java.sql.*,com.example.DB" %>
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <h2>Employee Records</h2>
+    <table border="1">
+    <tr><th>Eno</th><th>Name</th><th>Age</th><th>Designation</th><th>Salary</th></tr>
+    <%
+    try(Connection con=DB.getConnection();
+        Statement st=con.createStatement();
+        ResultSet rs=st.executeQuery("SELECT * FROM employee")) {
+      while(rs.next()) {
+    %>
+      <tr>
+      <td><%= rs.getInt("eno") %></td>
+      <td><%= rs.getString("name") %></td>
+      <td><%= rs.getInt("age") %></td>
+      <td><%= rs.getString("designation") %></td>
+      <td><%= rs.getBigDecimal("salary") %></td>
+      </tr>
+    <% } } catch(Exception e) { out.println(e.getMessage()); } %>
+    </table>
+
+============================================================
+PRACTICAL 6 - JSP, JSTL AND EXPRESSION LANGUAGE
+============================================================
+
+JSTL 1.2 is included in the Maven pom.xml above.
+
+6(a) UPDATE EMPLOYEE USING MATCHING ENO
+
+Create src/main/webapp/employee-update.html:
+    <form action="update-employee.jsp" method="post">
+      Eno: <input type="number" name="eno" required><br>
+      Name: <input name="name" required><br>
+      Age: <input type="number" name="age" required><br>
+      Designation: <input name="designation" required><br>
+      Salary: <input type="number" step="0.01" name="salary" required><br>
+      <button>Update</button>
+    </form>
+
+Create src/main/webapp/update-employee.jsp:
+    <%@ page import="java.sql.*,com.example.DB" %>
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%
+    try {
+      int eno=Integer.parseInt(request.getParameter("eno"));
+      int age=Integer.parseInt(request.getParameter("age"));
+      double salary=Double.parseDouble(request.getParameter("salary"));
+      String sql="UPDATE employee SET name=?,age=?,designation=?,salary=? WHERE eno=?";
+      try(Connection con=DB.getConnection();
+          PreparedStatement ps=con.prepareStatement(sql)) {
+        ps.setString(1,request.getParameter("name"));
+        ps.setInt(2,age);
+        ps.setString(3,request.getParameter("designation"));
+        ps.setDouble(4,salary);
+        ps.setInt(5,eno);
+        int rows=ps.executeUpdate();
+        out.println(rows>0 ? "Employee updated" : "No matching employee number");
+      }
+    } catch(Exception e) { out.println("Invalid input/database error: "+e.getMessage()); }
+    %>
+    <br><a href="employees.jsp">View employees</a>
+
+6(b) JSP EXPRESSION LANGUAGE (EL)
+
+Create src/main/webapp/el-form.jsp:
+    <form action="el-result.jsp" method="get">
+      Name: <input name="name"><br>
+      Age: <input name="age"><br>
+      <button>Submit</button>
+    </form>
+
+Create src/main/webapp/el-result.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <h2>EL Demo</h2>
+    Name: ${param.name}<br>
+    Age: ${param.age}<br>
+    Context path: ${pageContext.request.contextPath}<br>
+    Method: ${pageContext.request.method}
+
+6(c) JSTL DEMONSTRATION
+
+Create src/main/webapp/jstl-demo.jsp:
+    <%@ page contentType="text/html;charset=UTF-8" %>
+    <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+    <h2>JSTL Core Tags</h2>
+    <c:set var="studentName" value="Sujal"/>
+    Name: <c:out value="${studentName}"/><br>
+    <c:if test="${not empty studentName}">
+      Student name is available.<br>
+    </c:if>
+    <c:choose>
+      <c:when test="${param.marks >= 40}">Pass</c:when>
+      <c:otherwise>Fail / marks not supplied</c:otherwise>
+    </c:choose>
+    <c:forEach var="i" begin="1" end="5">
+      <p>Number: <c:out value="${i}"/></p>
+    </c:forEach>
+Test: /jstl-demo.jsp?marks=75
+
+============================================================
+BUILD, DEPLOY AND TEST
+============================================================
+
+After adding Java or JSP files:
+    cd ~/java-practicals
+    mvn clean package
+    cp target/java-practicals.war ~/apache-tomcat-9/webapps/
+If needed, restart Tomcat:
+    ~/apache-tomcat-9/bin/shutdown.sh
+    ~/apache-tomcat-9/bin/startup.sh
+
+Useful URLs:
+    /calculator.html
+    /login.html
+    /register.html
+    /index.jsp
+    /cookie.html
+    /session.html
+    /upload.html
+    /qa.jsp
+    /nonblocking.html
+    /implicit.jsp
+    /student-form.jsp
+    /jsp-register.jsp
+    /jsp-login.jsp
+    /directives.jsp
+    /validate.jsp
+    /employees.jsp
+    /employee-update.html
+    /el-form.jsp
+    /jstl-demo.jsp
+
+TROUBLESHOOTING
+---------------
+HTTP 404: Check WAR deployment, URL spelling and @WebServlet mapping.
+HTTP 500: Check Tomcat logs: tail -f ~/apache-tomcat-9/logs/catalina.out
+javax.servlet not found: Use Tomcat 9 and keep servlet-api dependency in pom.xml.
+JDBC connection error: Check MariaDB service, database, username/password and DB.java.
+JSTL error: Confirm JSTL dependency and Tomcat 9 / JSTL 1.2 compatibility.
+Upload permission error: Ensure Tomcat's Linux user can write to ~/servlet-uploads.
+Port 8080 busy: sudo ss -ltnp | grep 8080
+
+SAFETY / ACCURACY NOTES
+-----------------------
+- Use the same project structure and package name shown above.
+- Save each code block in the exact filename specified.
+- Run `mvn clean package` after creating files; then deploy the WAR.
+- Some practicals depend on the database tables created in the prerequisite section.
+- Cookies may be blocked or cleared by browser settings.
+- Non-blocking I/O requires Servlet 3.1+; Tomcat 9 supports it.
+- File upload example limits uploads to 5 MB and sanitizes the submitted filename.
+- Password examples are intentionally simple for college demonstrations only.
+- If your college specifically uses Tomcat 10+, ask for Jakarta-compatible code rather than mixing namespaces.
+
+CHECKLIST
+---------
+[ ] 1(a) Calculator Servlet
+[ ] 1(b) Login Servlet
+[ ] 1(c) Registration Servlet using JDBC
+[ ] 2(a) RequestDispatcher password validation
+[ ] 2(b) Cookie visit counter
+[ ] 2(c) Session creation, previous visit and destruction
+[ ] 3(a) File upload and download
+[ ] 3(b) Database Question-Answer app
+[ ] 3(c) Non-blocking read
+[ ] 4(a) JSP implicit objects
+[ ] 4(b) JSP form values and validation
+[ ] 4(c) JSP registration/login using JDBC
+[ ] 5(a) JSP directives and implicit objects
+[ ] 5(b) JSP form processing and validation
+[ ] 5(c) Display MySQL data using JDBC
+[ ] 6(a) Update employee using matching eno
+[ ] 6(b) JSP Expression Language
+[ ] 6(c) JSTL application
+
+END OF MODULE 1 GUIDE
